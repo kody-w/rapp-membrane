@@ -170,10 +170,87 @@ cmd_pull() {
   fi
 }
 
+# ---- 2b. SHAPE: decide what this BECOMES in RAPP ----------------------------
+# Screening asks "is this safe to publish". Shaping asks "what is this, in RAPP
+# terms". Both have to happen or you get a safe artifact nobody can install.
+#
+# Nothing is forced. A tree that has no capability in it is reported as such
+# rather than wrapped in a manifest that claims otherwise -- a store entry that
+# does not run is worse than no entry, because someone installs it.
+cmd_shape() {
+  dir="$1"; name="$2"; out="${3:-$dir/.rapp-shape}"
+  [ -d "$dir" ] || die "no such directory: $dir"
+  TOASTER="${MEMBRANE_TOASTER:-$HERE/toaster.py}"
+  mkdir -p "$out"
+
+  skills=$(find "$dir" -name SKILL.md -not -path '*/.git/*' 2>/dev/null | wc -l | tr -d ' ')
+  agents=$(find "$dir" -name '*_agent.py' -not -path '*/.git/*' 2>/dev/null | wc -l | tr -d ' ')
+  pys=$(find "$dir" -name '*.py' -not -path '*/.git/*' 2>/dev/null | wc -l | tr -d ' ')
+  say "genre: $skills SKILL.md, $agents agent.py, $pys python file(s)"
+
+  made=0
+  if [ "$skills" -gt 0 ] && [ -f "$TOASTER" ]; then
+    # Skills are bread. Toast them, then project each into a single-file agent
+    # -- that is the unit a RAPP store entry actually installs.
+    while IFS= read -r f; do
+      [ -z "$f" ] && continue
+      python3 "$TOASTER" toast "$f" >/dev/null 2>&1
+      slug=$(basename "$(dirname "$f")")
+      if python3 "$TOASTER" convert "$f" --to agent \
+           -o "$out/${slug//-/_}_agent.py" >/dev/null 2>&1; then
+        made=$((made+1))
+      fi
+    done < <(find "$dir" -name SKILL.md -not -path '*/.git/*' 2>/dev/null)
+  fi
+  if [ "$agents" -gt 0 ]; then
+    while IFS= read -r f; do
+      [ -z "$f" ] && continue
+      cp "$f" "$out/$(basename "$f")" 2>/dev/null && made=$((made+1))
+    done < <(find "$dir" -name '*_agent.py' -not -path '*/.git/*' 2>/dev/null)
+  fi
+
+  if [ "$made" -eq 0 ]; then
+    say "${YEL}no installable capability found${RST} — this tree does not shape into"
+    say "a store rapplication. Reporting that instead of emitting a manifest"
+    say "that claims otherwise: an entry that does not run is worse than none."
+    return 2
+  fi
+
+  # every emitted agent must actually load, or it is not shippable
+  ok=0
+  for a in "$out"/*_agent.py; do
+    [ -f "$a" ] || continue
+    python3 "$a" --tool >/dev/null 2>&1 && ok=$((ok+1))
+  done
+  python3 - "$out" "$name" "$made" "$ok" <<'PY'
+import sys, json, pathlib
+out, name, made, ok = sys.argv[1], sys.argv[2], int(sys.argv[3]), int(sys.argv[4])
+files = sorted(p.name for p in pathlib.Path(out).glob("*_agent.py"))
+json.dump({
+  "schema": "rapp-application/1.0",
+  "id": name.replace("-", "_"),
+  "name": name,
+  "version": "0.1.0",
+  "type": "rapplication",
+  "summary": f"Shaped by rapp-membrane from an arbitrary input tree: "
+             f"{made} capability file(s), {ok} verified loadable.",
+  "singletons": files,
+  "shaped_by": "rapp-membrane",
+  "verified_loadable": ok,
+  "caveat": None if ok == made else
+            f"{made - ok} emitted file(s) did NOT load — do not publish those",
+}, open(f"{out}/manifest.json", "w"), indent=2)
+print(f"  shaped {made} capability file(s); {ok} load and declare a tool contract")
+PY
+  [ "$ok" -gt 0 ] || die "nothing emitted actually loads — refusing to shape"
+}
+
 case "${1:-}" in
   egg)   shift; cmd_egg   "$@" ;;
   hatch) shift; cmd_hatch "$@" ;;
   scan)  shift; cmd_scan  "$@" ;;
+  shape) shift; cmd_shape "$@" ;;
   pull)  shift; cmd_pull  "$@" ;;
   *) sed -n '2,34p' "${BASH_SOURCE[0]}"; exit 64 ;;
 esac
+
