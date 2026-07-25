@@ -46,6 +46,49 @@ it. You are membraning it, and the pipeline works out what it becomes.
 | 4 | **SCAN** | *Now* look for PII, in the hatched tree, where it's visible and enumerable. **This is the checkpoint.** |
 | 5 | **PUBLISH** | Only after the scan comes back clean. |
 
+## Shaping is judgment. Screening is machinery.
+
+The membrane is deliberately **not** deterministic end to end, and the split is
+the whole design:
+
+| | Who does it | Why |
+|---|---|---|
+| egg · hatch · digest · **scan** | **machinery** | Pattern matching. Being mechanical is the *point* — a gate that reasons can be argued with. |
+| **shape** — what does this become? | **an agent** | Cannot be a case statement over file extensions. That only handles inputs its author imagined, and calls everything else "unshapeable" — which is a fact about the author, not the input. |
+| **parity** — does the port still work? | **machinery** | Falsifiable. Doesn't care who wrote the port or how many tries it took. |
+
+So: **judgment produces, determinism verifies.** A bad shaping decision yields a
+rejected artifact, never a bad publish — because the gates never ask the shaper
+anything.
+
+### Porting, not classifying
+
+Shaping doesn't label a repo. It **reads the code and writes a RAPP version that
+does what the original did**, then proves it:
+
+```
+ORIGINAL   lines=2 words=9 chars=41 / the: 3 / quick: 1
+PORT       lines=2 words=9 chars=41 / the: 3 / quick: 1
+           case 1: PARITY   case 2: PARITY   case 3: PARITY
+```
+
+`parity.py` compares **facts, not bytes** — a port that prints the same numbers
+in a different layout is a correct port. Demanding byte-identical stdout would
+reject good work and teach the shaper to imitate formatting instead of
+behaviour. It fails a deliberately broken port, which is the only way to know
+it's testing anything.
+
+### One thing that did NOT work, recorded so nobody repeats it
+
+The shaping was first delegated to a small context-free model over an API. It
+returned prose *asking to be shown the file*, which then got written into a
+`.py` and failed to parse — so it looked like the model was getting worse when
+it was never returning code at all.
+
+The lesson isn't "models can't port code". It's that **the thing doing the
+shaping must be the thing holding the context.** An agent that has actually read
+the source can port it. One handed a file listing cannot.
+
 ## This is a workflow, not a scrubber
 
 Nothing here is magic and nothing is fully deterministic. The value is that
