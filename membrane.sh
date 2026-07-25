@@ -112,10 +112,37 @@ cmd_scan() {
 
   if [ -n "${MEMBRANE_OPERATOR:-}" ]; then
     ops=$(printf '%s' "$MEMBRANE_OPERATOR" | tr ',' '|' | sed 's/|$//')
-    n=$(grep -rIloEi "($ops)" "$dir" 2>/dev/null | wc -l | tr -d ' ')
+    # Long base64 runs are excluded from IDENTITY matching. A capsule is random
+    # base64 and will contain short names by pure chance -- "kody" turned up in
+    # one on the first real run. Reporting that as PII is worse than useless:
+    # false positives are exactly how a gate gets switched off. Secrets and
+    # roster terms are still matched everywhere, including inside blobs.
+    n=$(MEMBRANE_OPS="$ops" python3 - "$dir" <<'PYO'
+import os,re,sys,pathlib
+ops=re.compile("("+os.environ["MEMBRANE_OPS"]+")", re.I)
+b64=re.compile(r"[A-Za-z0-9+/=]{120,}")
+hits=0
+for p in pathlib.Path(sys.argv[1]).rglob("*"):
+    if not p.is_file(): continue
+    try: t=p.read_text(encoding="utf-8")
+    except Exception: continue
+    if ops.search(b64.sub("", t)): hits+=1
+print(hits)
+PYO
+)
     printf "    %-11s %s file(s)\n" "operator" "$n"; total=$((total+n))
-    [ "$n" -gt 0 ] && grep -rIloEi "($ops)" "$dir" 2>/dev/null | head -5 \
-      | sed "s|^$dir/|      |"
+    [ "${n:-0}" -gt 0 ] && MEMBRANE_OPS="$ops" python3 - "$dir" <<'PYL'
+import os,re,sys,pathlib
+ops=re.compile("("+os.environ["MEMBRANE_OPS"]+")", re.I)
+b64=re.compile(r"[A-Za-z0-9+/=]{120,}")
+root=pathlib.Path(sys.argv[1]); n=0
+for p in sorted(root.rglob("*")):
+    if not p.is_file() or n>=5: continue
+    try: t=p.read_text(encoding="utf-8")
+    except Exception: continue
+    if ops.search(b64.sub("", t)):
+        print("      "+str(p.relative_to(root))); n+=1
+PYL
   else
     printf "    %-11s ${YEL}NOT SET${RST}  \$MEMBRANE_OPERATOR — your own name and\n" "operator"
     printf "                handle are what a private tree is actually full of\n"
@@ -245,11 +272,76 @@ PY
   [ "$ok" -gt 0 ] || die "nothing emitted actually loads — refusing to shape"
 }
 
+# ---- THE ONE VERB ----------------------------------------------------------
+# `membrane rapp <thing> <name>` — for someone who has something they want to
+# use and does NOT want to learn RAPP to use it.
+#
+# They should not need to know what an agent.py is, what toasting does, what an
+# egg is, or what a denylist is for. They have a thing. They want it usable.
+# Everything below narrates itself in plain language so the pipeline teaches by
+# running, and every stop says what to do next rather than just failing.
+cmd_rapp() {
+  src="$1"; name="${2:-$(basename "$src")}"
+  work="${MEMBRANE_WORK:-/tmp/membrane-$name}"; rm -rf "$work"; mkdir -p "$work"
+  echo
+  echo "  membraning '$src' into a RAPP rapplication called '$name'"
+  echo "  ─────────────────────────────────────────────────────────────"
+
+  echo
+  echo "  [1/5] Packing it exactly as it is."
+  echo "        Nothing is cherry-picked. Choosing what to include means"
+  echo "        guessing about files you have not opened, and that is how"
+  echo "        things get missed."
+  cmd_egg "$src" "$name" "$work/$name.egg" || return 1
+
+  echo
+  echo "  [2/5] Unpacking it again, from the packed copy."
+  echo "        Everything after this inspects what actually shipped, not"
+  echo "        what was on your disk. Those differ more often than you think."
+  cmd_hatch "$work/$name.egg" "$work/hatched" || return 1
+
+  echo
+  echo "  [3/5] Working out what this becomes in RAPP."
+  echo "        You do not have to answer this. Prose instructions become"
+  echo "        single-file agents; existing agents pass through; anything"
+  echo "        with no capability in it is reported, not forced."
+  if ! cmd_shape "$work/hatched" "$name" "$work/shaped"; then
+    echo
+    echo "  STOPPED: there is nothing installable in here."
+    echo "  That is a real answer, not a failure — this tree is not a"
+    echo "  rapplication. Point it at something with instructions or code."
+    return 2
+  fi
+
+  echo
+  echo "  [4/5] Checking nothing private is riding along."
+  echo "        Emails, home paths, your own name, your roster, secrets, and"
+  echo "        whole file types that must never ship (.env, session captures)."
+  if ! cmd_scan "$work/shaped"; then
+    echo
+    echo "  STOPPED before publishing. Nothing was rewritten behind your back —"
+    echo "  the findings above are yours to judge. Fix them at the source, then"
+    echo "  run this again."
+    return 1
+  fi
+
+  echo
+  echo "  [5/5] Ready to publish."
+  echo "        artifact : $work/$name.egg"
+  echo "        agents   : $(ls "$work/shaped"/*_agent.py 2>/dev/null | wc -l | tr -d ' ') installable file(s)"
+  echo "        manifest : $work/shaped/manifest.json"
+  echo
+  echo "  ${GRN}CLEARED${RST} — this is a publishable RAPP rapplication."
+  echo "  Publish with your store's submission flow; the manifest is store-shaped."
+  return 0
+}
+
 case "${1:-}" in
   egg)   shift; cmd_egg   "$@" ;;
   hatch) shift; cmd_hatch "$@" ;;
   scan)  shift; cmd_scan  "$@" ;;
   shape) shift; cmd_shape "$@" ;;
+  rapp)  shift; cmd_rapp  "$@" ;;
   pull)  shift; cmd_pull  "$@" ;;
   *) sed -n '2,34p' "${BASH_SOURCE[0]}"; exit 64 ;;
 esac

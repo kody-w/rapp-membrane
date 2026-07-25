@@ -8,10 +8,35 @@ you take the private thing in whatever shape it's already in, and let the
 *process* decide what's allowed out the far side.
 
 ```bash
-membrane.sh pull ~/my-private-repo my-thing
+membrane.sh rapp ~/my-private-repo my-thing
 ```
 
-## The pull
+One verb. You do not need to know what an agent is, what an egg is, what
+toasting does, or what a denylist is for. You have a thing you want to use as a
+rapplication. That is the entire required understanding.
+
+## The hero use case
+
+This pattern exists because of a real need, not a design exercise.
+
+There was a **private control-tower repo** — situational displays, content
+gates, flight rules — that was worth sharing, and could not be shared. It was
+full of an estate map, a customer roster, decision logs, and the operator's own
+name in a hundred places. The obvious approach is to hand-pick the safe files.
+
+That approach is wrong, and it fails in a specific way: **you end up guessing
+about files you have not opened.** A careful human pass over that repo declared
+it clean. The process then found operator identity in it three more times.
+
+So instead: pack the whole thing as-is, hatch it back out, and let the
+*process* decide what is allowed through. What came out the far side was a
+publishable rapplication. What it caught on the way is in the record below.
+
+Anything with that shape works the same way — a repo, an internal tool, a SaaS
+product you want to mirror into something you control. You are not converting
+it. You are membraning it, and the pipeline works out what it becomes.
+
+## The pipeline
 
 | | | |
 |---|---|---|
