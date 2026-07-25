@@ -106,15 +106,15 @@ cmd_scan() {
   for spec in "email:[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}" \
               "home-path:/(Users|home)/[A-Za-z0-9._-]+"; do
     label="${spec%%:*}"; pat="${spec#*:}"
-    n=$(grep -rIloE "$pat" "$dir" 2>/dev/null | wc -l | tr -d ' ')
+    n=$(grep -rIloE --exclude-dir=.git "$pat" "$dir" 2>/dev/null | wc -l | tr -d ' ')
     printf "    %-11s %s file(s)\n" "$label" "$n"; total=$((total+n))
   done
 
   if [ -n "${MEMBRANE_OPERATOR:-}" ]; then
     ops=$(printf '%s' "$MEMBRANE_OPERATOR" | tr ',' '|' | sed 's/|$//')
     # Long base64 runs are excluded from IDENTITY matching. A capsule is random
-    # base64 and will contain short names by pure chance -- "kody" turned up in
-    # one on the first real run. Reporting that as PII is worse than useless:
+    # base64 and will contain short names by pure chance -- a short operator name turned up in
+    # one on the first real run of this tool. Reporting that as PII is useless:
     # false positives are exactly how a gate gets switched off. Secrets and
     # roster terms are still matched everywhere, including inside blobs.
     n=$(MEMBRANE_OPS="$ops" python3 - "$dir" <<'PYO'
@@ -123,7 +123,7 @@ ops=re.compile("("+os.environ["MEMBRANE_OPS"]+")", re.I)
 b64=re.compile(r"[A-Za-z0-9+/=]{120,}")
 hits=0
 for p in pathlib.Path(sys.argv[1]).rglob("*"):
-    if not p.is_file(): continue
+    if not p.is_file() or "/.git/" in "/"+str(p): continue
     try: t=p.read_text(encoding="utf-8")
     except Exception: continue
     if ops.search(b64.sub("", t)): hits+=1
@@ -137,7 +137,7 @@ ops=re.compile("("+os.environ["MEMBRANE_OPS"]+")", re.I)
 b64=re.compile(r"[A-Za-z0-9+/=]{120,}")
 root=pathlib.Path(sys.argv[1]); n=0
 for p in sorted(root.rglob("*")):
-    if not p.is_file() or n>=5: continue
+    if not p.is_file() or n>=5 or "/.git/" in "/"+str(p): continue
     try: t=p.read_text(encoding="utf-8")
     except Exception: continue
     if ops.search(b64.sub("", t)):
