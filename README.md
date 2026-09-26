@@ -1,5 +1,9 @@
 # rapp-membrane
 
+<!-- rapp1:network-header:start -->
+[![RAPP/1](https://kody-w.github.io/rapp-hive-public/portfolio/badges/rapp-membrane.svg)](https://github.com/kody-w/rapp-hive-public/blob/main/portfolio/repos/rapp-membrane.md) · **New to RAPP?** [Start here: get your Brainstem →](https://github.com/kody-w/rapp-installer#start-here)
+<!-- rapp1:network-header:end -->
+
 **Get value out of a private repo without thinking about what's in it.**
 
 A cell membrane doesn't decide molecule by molecule. Its structure decides what
